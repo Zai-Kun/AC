@@ -42,3 +42,6 @@ profile/*
 logs/*
 private/*
 .DS_Store
+source/tools/communication
+source/src/profile.log
+source/enet/configure~

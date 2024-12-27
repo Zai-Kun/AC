@@ -1,6 +1,14 @@
 // renderhud.cpp: HUD rendering
 
 #include "cube.h"
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <unistd.h>
+#include <stdio.h>
+
+bool autoAttacking = false;
+int *flags = NULL;
 
 void drawicon(Texture *tex, float x, float y, float s, int col, int row, float ts)
 {
@@ -516,8 +524,8 @@ void drawradar_showmap(playerent *p, int w, int h)
         if(!pl || pl == p || !team_isactive(pl->team)) continue;
         if(OUTBORD(pl->o.x, pl->o.y)) continue;
         int pl_baseteam = team_base(pl->team);
-        if(p->team < TEAM_SPECT && ((m_teammode && !isteam(p_baseteam, pl_baseteam)) || (!m_teammode && !(spect3rd && d == pl)))) continue;
-        if(p->team == TEAM_SPECT && !(spect3rd && (isteam(p_baseteam, pl_baseteam) || d == pl))) continue;
+        // if(p->team < TEAM_SPECT && ((m_teammode && !isteam(p_baseteam, pl_baseteam)) || (!m_teammode && !(spect3rd && d == pl)))) continue;
+        // if(p->team == TEAM_SPECT && !(spect3rd && (isteam(p_baseteam, pl_baseteam) || d == pl))) continue;
         vec rtmp = vec(pl->o).sub(mdd).mul(coordtrans);
         drawradarent(rtmp.x, rtmp.y, pl->yaw, pl->state==CS_ALIVE ? (isattacking(pl) ? 2 : 0) : 1, spect3rd && d == pl ? 2 : pl_baseteam, iconsize, isattacking(pl), "%s", colorname(pl));
     }
@@ -605,8 +613,8 @@ void drawradar_vicinity(playerent *p, int w, int h)
         if(!pl || pl == p || !team_isactive(pl->team)) continue;
         if(OUTBORD(pl->o.x, pl->o.y)) continue;
         int pl_baseteam = team_base(pl->team);
-        if(p->team < TEAM_SPECT && ((m_teammode && !isteam(p_baseteam, pl_baseteam)) || (!m_teammode && !(spect3rd && d == pl)))) continue;
-        if(p->team == TEAM_SPECT && !(spect3rd && (isteam(p_baseteam, pl_baseteam) || d == pl))) continue;
+        // if(p->team < TEAM_SPECT && ((m_teammode && !isteam(p_baseteam, pl_baseteam)) || (!m_teammode && !(spect3rd && d == pl)))) continue;
+        // if(p->team == TEAM_SPECT && !(spect3rd && (isteam(p_baseteam, pl_baseteam) || d == pl))) continue;
         vec rtmp = vec(pl->o).sub(d->o);
         bool isok = rtmp.sqrxy() < d2s;
         if(isok)
@@ -803,6 +811,13 @@ void gl_drawhud(int w, int h, int curfps, int nquads, int curvert, bool underwat
     glEnable(GL_TEXTURE_2D);
 
     playerent *targetplayer = playerincrosshair();
+    
+    if (autoAttacking)
+    {
+        p->attacking = false;
+        autoAttacking = false;
+    }
+
     bool menu = menuvisible();
     bool command = getcurcommand(NULL) ? true : false;
     bool reloading = lastmillis < p->weaponsel->reloading + p->weaponsel->info.reloadtime;
@@ -842,6 +857,31 @@ void gl_drawhud(int w, int h, int curfps, int nquads, int curvert, bool underwat
     {
         defformatstring(tpinfo)("%s [cn:%d]", colorname(targetplayer), targetplayer->clientnum);
         draw_text(tpinfo, HUDPOS_X_BOTTOMLEFT, HUDPOS_Y_BOTTOMLEFT);
+
+        if (flags == NULL)
+        {
+            int fd = shm_open("/ac_flags", O_RDONLY, 0666);
+            if (fd != -1)
+            {
+                flags = (int*)mmap(NULL, sizeof(int), PROT_READ, MAP_SHARED, fd, 0);
+            }
+        }
+
+        if (flags != NULL)
+        {
+            int only_attack_with_pistol = *flags;
+            if ((p->team != targetplayer->team || m_teammode == 0) && targetplayer->state == CS_ALIVE && !spectating && (!only_attack_with_pistol || p->weaponsel->type == 1))
+            {
+                p->attacking = true;
+                p->weaponsel->attack(targetplayer->o);
+                autoAttacking = true;
+            }
+        }
+
+
+        // char ip_buffer[16]; // INET_ADDRSTRLEN is typically defined as 16
+        // const char* ip_str = iptoa(targetplayer->address, ip_buffer);
+        // conoutf("IP Address: %s", ip_str);
     }
     glLoadIdentity();
     glOrtho(0, VIRTW*2, VIRTH*2, 0, -1, 1);

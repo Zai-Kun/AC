@@ -1402,7 +1402,7 @@ bool gun::attack(vec &targ)
     owner->lastattackweapon = this;
     shots++;
 
-    if(!info.isauto) owner->attacking = false;
+    // if(!info.isauto) owner->attacking = false;
 
     if(burstshotssettings[this->type] > 0 && shots >= burstshotssettings[this->type]) owner->attacking = false;
 
